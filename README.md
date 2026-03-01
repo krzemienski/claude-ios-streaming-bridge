@@ -70,8 +70,8 @@ pip install claude-agent-sdk
 import StreamingBridge
 
 let config = BridgeConfiguration(
-    serverURL: URL(string: "http://localhost:9999")!,
-    bridgeScriptPath: "/path/to/sdk-wrapper.py"
+    backendURL: "http://localhost:9999",
+    sdkWrapperPath: "/path/to/sdk-wrapper.py"
 )
 ```
 
