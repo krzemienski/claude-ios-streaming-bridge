@@ -1,0 +1,31 @@
+sequenceDiagram
+    participant Client
+    participant SSEClient
+    participant VaporBackend
+    participant PythonSDK
+
+    Client->>SSEClient: Open SSE connection
+    SSEClient->>VaporBackend: HTTP GET /api/v1/chat/stream
+    VaporBackend->>PythonSDK: Spawn sdk-wrapper.py
+
+    Note over SSEClient: Start 30s initial timeout
+
+    PythonSDK-->>VaporBackend: First NDJSON line
+    VaporBackend-->>SSEClient: SSE event data (first chunk)
+    SSEClient-->>Client: StreamMessage JSON
+
+    Note over SSEClient: First data received — cancel 30s initial timeout
+
+    loop Every 15s heartbeat check
+        VaporBackend-->>SSEClient: SSE heartbeat ping
+        SSEClient-->>Client: Heartbeat acknowledged
+    end
+
+    PythonSDK-->>VaporBackend: Continued NDJSON stream
+    VaporBackend-->>SSEClient: SSE event data (streaming)
+    SSEClient-->>Client: StreamMessage JSON chunks
+
+    Note over SSEClient: 300s absolute cap reached
+    SSEClient->>VaporBackend: Connection closed (total timeout)
+    VaporBackend->>PythonSDK: Terminate process
+    SSEClient-->>Client: Timeout error surfaced

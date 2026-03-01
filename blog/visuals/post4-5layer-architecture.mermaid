@@ -1,0 +1,31 @@
+flowchart TD
+    subgraph ios_app [iOS App]
+        ChatView[SwiftUI ChatView]
+        SSEClient["SSEClient\n(URLSession async bytes)"]
+    end
+
+    subgraph backend [Backend]
+        Vapor["Vapor Backend\n(SSE endpoint)"]
+    end
+
+    subgraph python_bridge [Python Bridge]
+        PythonSDK["Python SDK Wrapper\n(sdk-wrapper.py, flush=True)"]
+    end
+
+    subgraph cli_layer [CLI]
+        ClaudeCLI["Claude CLI\n(output-format stream-json)"]
+    end
+
+    AnthropicAPI[Anthropic API]
+
+    ChatView -->|StreamMessage JSON| SSEClient
+    SSEClient -->|SSE event data| Vapor
+    Vapor -->|NDJSON lines| PythonSDK
+    PythonSDK -->|stream-json stdout| ClaudeCLI
+    ClaudeCLI -->|API response chunks| AnthropicAPI
+
+    AnthropicAPI -.->|API response chunks| ClaudeCLI
+    ClaudeCLI -.->|stream-json stdout| PythonSDK
+    PythonSDK -.->|NDJSON lines| Vapor
+    Vapor -.->|SSE event data| SSEClient
+    SSEClient -.->|StreamMessage JSON| ChatView
