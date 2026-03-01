@@ -1,0 +1,70 @@
+sequenceDiagram
+    participant User as User (tap Send)
+    participant ChatVM as ChatViewModel
+    participant SSE as SSEClient
+    participant URLSess as URLSession
+    participant Vapor as Vapor Backend
+    participant Exec as ClaudeExecutorService
+    participant Python as sdk-wrapper.py
+    participant CLI as Claude CLI
+    participant API as Anthropic API
+
+    Note over User,API: Outbound: User prompt travels down 5 layers (~50ms setup)
+
+    User->>ChatVM: sendMessage("Hello")
+    Note right of ChatVM: 0ms: Append user ChatMessage
+    ChatVM->>SSE: startStream(ChatStreamRequest)
+    Note right of SSE: 1ms: POST /api/v1/chat/stream
+    SSE->>URLSess: bytes(for: urlRequest)
+    Note right of URLSess: 2ms: HTTP connection opens
+    URLSess->>Vapor: HTTP POST (JSON body)
+    Note right of Vapor: 5ms: Route handler invoked
+    Vapor->>Exec: execute(prompt:)
+    Note right of Exec: 10ms: Strip CLAUDE* env vars
+    Exec->>Python: Process.run() python3 sdk-wrapper.py
+    Note right of Python: 15ms: Import claude_agent_sdk
+    Python->>CLI: claude_agent_sdk.query()
+    Note right of CLI: 20ms: --output-format stream-json
+    CLI->>API: HTTP POST /v1/messages (streaming)
+    Note right of API: 50ms: Model inference begins
+
+    Note over User,API: Inbound: First token returns up 5 layers (~200-12000ms)
+
+    API-->>CLI: {"type":"content_block_delta",...}
+    Note right of CLI: +0ms: stdout JSON line
+    CLI-->>Python: NDJSON line on stdout
+    Note right of Python: +1ms: print(line, flush=True)
+    Python-->>Exec: Pipe read on readQueue
+    Note right of Exec: +2ms: Cancel 30s initial timeout
+    Exec-->>Vapor: AsyncThrowingStream yield
+    Note right of Vapor: +3ms: SSE event: data: {...}
+    Vapor-->>URLSess: HTTP chunk
+    Note right of URLSess: +5ms: asyncBytes.lines yields
+    URLSess-->>SSE: SSE line parsed
+    Note right of SSE: +6ms: lastActivity.touch()
+    SSE-->>ChatVM: withObservationTracking fires
+    Note right of ChatVM: +7ms: processStreamMessage
+    ChatVM-->>User: SwiftUI re-render
+    Note right of User: +8ms: Character appears on screen
+
+    Note over User,API: Subsequent tokens: ~8ms per hop (streaming)
+
+    loop Every token (streaming phase)
+        API-->>CLI: delta chunk
+        CLI-->>Python: stdout line
+        Python-->>Vapor: NDJSON
+        Vapor-->>SSE: SSE event
+        SSE-->>ChatVM: @Observable update
+        ChatVM-->>User: UI re-render
+    end
+
+    Note over User,API: Stream completion
+
+    API-->>CLI: {"type":"result",...}
+    CLI-->>Python: Final NDJSON + EOF
+    Python-->>Exec: EOF on pipe
+    Note right of Exec: waitUntilExit() before terminationStatus
+    Exec-->>Vapor: Stream finished
+    Vapor-->>SSE: SSE stream ends
+    SSE-->>ChatVM: isStreaming = false
+    ChatVM-->>User: Show cost: $0.04

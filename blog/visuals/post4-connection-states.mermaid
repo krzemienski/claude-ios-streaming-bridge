@@ -1,0 +1,47 @@
+stateDiagram-v2
+    [*] --> Disconnected
+
+    Disconnected --> Connecting : startStream()
+
+    Connecting --> Connected : HTTP 2xx + first byte
+    Connecting --> Disconnected : Non-network error\n(bad JSON, auth failure)
+    Connecting --> Disconnected : 60s connection timeout
+    Connecting --> Disconnected : cancel()
+
+    Connected --> Disconnected : Stream ends normally\n(EOF from server)
+    Connected --> Reconnecting : Network error detected\n(isNetworkError = true)
+    Connected --> Disconnected : 45s heartbeat timeout\n(no reconnect attempts left)
+    Connected --> Disconnected : cancel()
+    Connected --> Disconnected : App enters background\n(iOS only, saves radio)
+
+    Reconnecting --> Connecting : Backoff delay elapsed\n(2s, 4s, 8s... cap 30s)
+    Reconnecting --> Disconnected : Max attempts reached\n(default: 10)
+    Reconnecting --> Connecting : resetAndReconnect()\n(cancels backoff sleep)
+    Reconnecting --> Disconnected : cancel()
+
+    state Connected {
+        [*] --> Streaming
+        Streaming --> WatchdogCheck : Every 15s
+        WatchdogCheck --> Streaming : lastActivity < 45s
+        WatchdogCheck --> HeartbeatTimeout : lastActivity >= 45s
+    }
+
+    note right of Connecting
+        TaskGroup races connection
+        against 60s sleep.
+        First to complete wins.
+    end note
+
+    note right of Reconnecting
+        Backoff sleep stored in
+        separate Task so
+        resetAndReconnect() can
+        cancel it for immediate retry.
+    end note
+
+    note right of Connected
+        LastActivityTracker uses
+        OSAllocatedUnfairLock
+        (not actor) to avoid
+        hop overhead on hot path.
+    end note
