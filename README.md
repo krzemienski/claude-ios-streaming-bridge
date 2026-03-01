@@ -234,6 +234,27 @@ This repo is the companion code for **Part 1** of the Agentic Development series
 9. [Stitch: From Design to Code in One Prompt](https://github.com/krzemienski/agentic-dev-guide/tree/main/09-stitch-design-to-code)
 10. [Building an AI Development Operating System](https://github.com/krzemienski/agentic-dev-guide/tree/main/10-ai-dev-operating-system)
 
+## Troubleshooting
+
+### "Works in terminal, fails inside Claude Code"
+The Claude CLI detects nesting via `CLAUDECODE` and `CLAUDE_CODE_*` environment variables. Strip them before spawning:
+```swift
+var env = ProcessInfo.processInfo.environment
+for key in env.keys where key.hasPrefix("CLAUDE") {
+    env.removeValue(forKey: key)
+}
+process.environment = env
+```
+
+### Python bridge shows no output
+Ensure `flush=True` on every `sys.stdout.write()`. Without explicit flushing, Python buffers output and the parent process sees nothing for seconds.
+
+### NSInvalidArgumentException on process.terminationStatus
+Always call `process.waitUntilExit()` before reading `terminationStatus`. stdout EOF does not guarantee process exit.
+
+### SSE connection drops after 30 seconds
+The default initial timeout is 30s. For slow networks, increase `BridgeConfiguration.initialTimeout`. The total timeout (default 5 min) is separate.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
