@@ -233,6 +233,16 @@ async def run(config):
 
 
 def main():
+    """Entry point: parse JSON config from argv[1] and run the bridge.
+
+    Usage:
+        python3 sdk-wrapper.py '{"prompt":"Hello","options":{}}'
+
+    The config dict must contain 'prompt' (str). Optional keys:
+        - options.model (str): Claude model to use
+        - options.maxTokens (int): Max response tokens
+        - session_id (str): Session identifier for tracking
+    """
     if len(sys.argv) < 2:
         print("Usage: sdk-wrapper.py '<json-config>'", file=sys.stderr)
         sys.exit(1)

@@ -119,7 +119,7 @@ for try await event in stream {
 ### 4. Run the Python Bridge Standalone
 
 ```bash
-python3 scripts/sdk-wrapper.py --prompt "What is 2+2?"
+python3 scripts/sdk-wrapper.py '{"prompt":"What is 2+2?","options":{}}'
 ```
 
 ## Key Components
