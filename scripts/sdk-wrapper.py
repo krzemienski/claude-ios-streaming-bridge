@@ -21,28 +21,14 @@ Architecture:
     output buffering delays events by unpredictable amounts, breaking
     the real-time streaming experience. Users would see nothing for
     seconds, then a burst of text, then nothing again.
+
+SDK Pattern: Uses isinstance() checks per official Claude Agent SDK docs.
+See: https://docs.claude.com/agent-sdk/python
 """
 
 import sys
 import json
 import asyncio
-
-
-# Non-content event types from the SDK that should be silently skipped.
-# These are protocol-level events, not user-facing messages.
-SKIP_EVENT_TYPES = frozenset({
-    "rate_limit_event",
-    "rate_limit",
-    "ping",
-    "heartbeat",
-    "error",
-    "content_block_start",
-    "content_block_stop",
-    "content_block_delta",
-    "message_start",
-    "message_stop",
-    "message_delta",
-})
 
 
 def emit(obj):
@@ -57,45 +43,31 @@ def emit(obj):
 
 
 def convert_content_block(block):
-    """Convert a Claude Agent SDK content block to StreamMessage-compatible dict.
+    """Convert a Claude Agent SDK content block to StreamMessage-compatible dict."""
+    from claude_agent_sdk import (
+        TextBlock, ThinkingBlock, ToolUseBlock, ToolResultBlock,
+    )
 
-    The SDK uses concrete classes (TextBlock, ThinkingBlock, ToolUseBlock,
-    ToolResultBlock) whose .type attribute may not resolve via getattr in all
-    SDK versions. Falls back to class name inspection when .type is None.
-    """
-    block_type = getattr(block, "type", None)
-
-    # Fallback: derive type from class name (e.g., TextBlock -> "text")
-    if block_type is None:
-        class_name = type(block).__name__.lower()
-        if "text" in class_name and "tool" not in class_name:
-            block_type = "text"
-        elif "thinking" in class_name:
-            block_type = "thinking"
-        elif "tooluse" in class_name or "tool_use" in class_name:
-            block_type = "tool_use"
-        elif "toolresult" in class_name or "tool_result" in class_name:
-            block_type = "tool_result"
-
-    if block_type == "text":
-        return {"type": "text", "text": getattr(block, "text", str(block))}
-    elif block_type == "tool_use":
+    if isinstance(block, TextBlock):
+        return {"type": "text", "text": block.text}
+    elif isinstance(block, ToolUseBlock):
         return {
             "type": "tool_use",
-            "id": getattr(block, "id", ""),
-            "name": getattr(block, "name", ""),
-            "input": getattr(block, "input", {}),
+            "id": block.id,
+            "name": block.name,
+            "input": block.input,
         }
-    elif block_type == "tool_result":
+    elif isinstance(block, ToolResultBlock):
         return {
             "type": "tool_result",
-            "tool_use_id": getattr(block, "tool_use_id", ""),
-            "content": getattr(block, "content", ""),
+            "tool_use_id": block.tool_use_id,
+            "content": block.content,
             "is_error": getattr(block, "is_error", False),
         }
-    elif block_type == "thinking":
-        return {"type": "thinking", "thinking": getattr(block, "thinking", "")}
+    elif isinstance(block, ThinkingBlock):
+        return {"type": "thinking", "thinking": block.thinking}
     else:
+        # Fallback for unknown block types
         text = getattr(block, "text", None) or getattr(block, "thinking", None) or str(block)
         return {"type": "text", "text": text}
 
@@ -123,7 +95,11 @@ def build_options(sdk_opts):
 
 async def run(config):
     """Run a Claude Agent SDK query and emit NDJSON results."""
-    from claude_agent_sdk import query
+    from claude_agent_sdk import (
+        query, ClaudeAgentOptions,
+        AssistantMessage, UserMessage, SystemMessage, ResultMessage,
+        TextBlock, ThinkingBlock, ToolUseBlock, ToolResultBlock,
+    )
 
     prompt = config.get("prompt", "")
     sdk_opts = config.get("options", {})
@@ -142,21 +118,10 @@ async def run(config):
 
     try:
         async for message in query(prompt=prompt, options=options):
-            msg_type = getattr(message, "type", None) or type(message).__name__.lower()
-            msg_type_lower = msg_type.lower()
-
-            if msg_type in SKIP_EVENT_TYPES or msg_type_lower in SKIP_EVENT_TYPES:
-                continue
-
-            if "assistant" in msg_type_lower:
-                content_blocks = []
-                if hasattr(message, "content"):
-                    for block in message.content:
-                        content_blocks.append(convert_content_block(block))
-
+            if isinstance(message, AssistantMessage):
+                content_blocks = [convert_content_block(b) for b in message.content]
                 if content_blocks:
                     got_content = True
-
                 emit({
                     "type": "assistant",
                     "message": {
@@ -166,43 +131,37 @@ async def run(config):
                     },
                 })
 
-            elif "result" in msg_type_lower:
+            elif isinstance(message, ResultMessage):
                 got_result = True
                 result = {
                     "type": "result",
-                    "subtype": "error" if getattr(message, "is_error", False) else "success",
-                    "is_error": getattr(message, "is_error", False),
+                    "subtype": "error" if message.is_error else "success",
+                    "is_error": message.is_error,
                     "session_id": getattr(message, "session_id", session_id),
-                    "total_cost_usd": getattr(message, "total_cost_usd", 0.0) or 0.0,
+                    "total_cost_usd": message.total_cost_usd or 0.0,
                 }
-
                 if hasattr(message, "usage") and message.usage:
                     usage = message.usage
                     result["usage"] = {
-                        "input_tokens": getattr(usage, "input_tokens", 0),
-                        "output_tokens": getattr(usage, "output_tokens", 0),
-                        "cache_read_input_tokens": getattr(usage, "cache_read_input_tokens", 0),
-                        "cache_creation_input_tokens": getattr(usage, "cache_creation_input_tokens", 0),
+                        "input_tokens": usage.get("input_tokens", 0) if isinstance(usage, dict) else getattr(usage, "input_tokens", 0),
+                        "output_tokens": usage.get("output_tokens", 0) if isinstance(usage, dict) else getattr(usage, "output_tokens", 0),
+                        "cache_read_input_tokens": usage.get("cache_read_input_tokens", 0) if isinstance(usage, dict) else getattr(usage, "cache_read_input_tokens", 0),
+                        "cache_creation_input_tokens": usage.get("cache_creation_input_tokens", 0) if isinstance(usage, dict) else getattr(usage, "cache_creation_input_tokens", 0),
                     }
-
                 emit(result)
 
-            elif "user" in msg_type_lower:
-                content_blocks = []
-                if hasattr(message, "content"):
-                    for block in message.content:
-                        content_blocks.append(convert_content_block(block))
-
+            elif isinstance(message, UserMessage):
+                content_blocks = [convert_content_block(b) for b in message.content]
                 emit({
                     "type": "user",
                     "message": {"role": "user", "content": content_blocks},
                 })
 
-            elif "system" in msg_type_lower:
-                pass  # Additional system messages during conversation
+            elif isinstance(message, SystemMessage):
+                pass  # System messages during conversation
 
             else:
-                print(f"sdk-wrapper: unknown message type: {msg_type}", file=sys.stderr)
+                print(f"sdk-wrapper: unknown message type: {type(message).__name__}", file=sys.stderr)
 
     except Exception as e:
         error_msg = str(e).lower()
