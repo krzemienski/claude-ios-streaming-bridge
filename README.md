@@ -1,5 +1,19 @@
 # Claude iOS Streaming Bridge
 
+[![Featured in Agentic Development Blog — Post #4](https://img.shields.io/badge/Agentic%20Development%20Blog-Post%20%234-blue)](https://github.com/krzemienski/agentic-development-guide)
+
+## Related Post
+
+**Featured in the Agentic Development Blog series — Post #4: The 5-Layer SSE Bridge — Building a Native iOS Client for Claude Code**
+
+- Send date: Thu Jun 11, 2026
+- LinkedIn: _link added on send day_
+- Canonical blog post: https://ai.hack.ski/blog/<slug-set-on-send-day>
+- Series hub: [agentic-development-guide](https://github.com/krzemienski/agentic-development-guide)
+
+---
+
+
 [![Part of the Agentic Development Series](https://img.shields.io/badge/Agentic%20Development-Part%201-blue)](https://github.com/krzemienski/agentic-dev-guide)
 [![Swift](https://img.shields.io/badge/Swift-5.10+-orange)](https://swift.org)
 [![Platform](https://img.shields.io/badge/Platform-iOS%2017%2B%20%7C%20macOS%2014%2B-lightgrey)](https://developer.apple.com)
