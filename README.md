@@ -1,5 +1,13 @@
 # Claude iOS Streaming Bridge
 
+> Swift, 5-layer SSE bridge for streaming Claude responses to iOS clients.
+
+Live site: [withagents.dev/posts/post-04-ios-streaming-bridge](https://withagents.dev/posts/post-04-ios-streaming-bridge)
+Field journal entry: [withagents.dev/posts/post-04-ios-streaming-bridge](https://withagents.dev/posts/post-04-ios-streaming-bridge)
+
+---
+
+
 [![Featured in Agentic Development Blog — Post #4](https://img.shields.io/badge/Agentic%20Development%20Blog-Post%20%234-blue)](https://github.com/krzemienski/agentic-development-guide)
 
 ## Related Post
